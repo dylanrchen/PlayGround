@@ -106,10 +106,41 @@ def get_style_loss(vgg16,normalization_mean,normalization_std,style_img,content_
     for i in range(len(model)-1,-1,-1):
         if isinstance(model[i],Contentloss) or isinstance(model[i],style_loss):
             break
+    # trim the model until last content_loss or style_loss layer 
+    
     model = model[:(i+1)]
+    
     return model,style_losses,content_losses
 
+def get_input_optimizer(input_img):
+    optimizer = optim.LBFGS([input_img.require_grad()])
+    return optimizer
 
+def train(vgg,normalization_mean,normalization_std,style_img,content_img,input_image,num_steps= 200,style_weight =5,content_weight= 5):
+    model,style_losses,content_losses = get_style_loss(vgg,normalization_mean,normalization_std,style_img,content_img)
+    optimizer = get_input_optimizer(input_image)
+    run = [0]
+    while run[0]<=num_steps:
+        def closure():
+            input_image.data.clump_(0,1)
+            optimizer.zero_grad()
+            style_loss = 0
+            content_loss = 0
+            for sl in style_losses:
+                style_loss += sl
+            for cl in content_losses:
+                content_loss += cl 
+            style_loss *= style_weight
+            content_loss *= content_weight
+            loss = style_loss + content_loss
+            loss.backward()
+            run[0]+=1
+            if run[0]%50==0:
+                print('curr style and content losses are',style_loss.item(),content_loss.item())
+            return style_loss+content_loss
+        optimizer.step(closure)
+    input_image.data.clump_(0,1)
+    return input_image
 
 
 
